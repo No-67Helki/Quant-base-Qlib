@@ -40,6 +40,12 @@ test-output.xml
 # special software
 mlruns/
 
+# local datasets and run logs (helki)
+data/
+*.log
+examples/intraday_t/mlruns/
+examples/intraday_t/run_*.log
+
 tags
 
 .pytest_cache/

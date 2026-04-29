@@ -1,0 +1,151 @@
+# =============================================================================
+# 单股票日内做T - DoubleEnsemble + Alpha158HF (158 + 5 高频因子) + 嵌套TWAP
+# -----------------------------------------------------------------------------
+# 与 config_doubleensemble.yaml 的差异：
+#   1. dataset.handler 改为本地 handlers.alpha158_hf.Alpha158HF
+#   2. 其余完全一致（模型/策略/回测段一致，方便对比 IC / 收益）
+# 用法：
+#   python workflow.py run_once --config config_doubleensemble_hf.yaml
+# =============================================================================
+qlib_init:
+    provider_uri:
+        day:    "../../data/cn_data"
+        1min:   "../../data/cn_data_1min"
+    dataset_cache: null
+    expression_cache: null
+    region: cn
+
+market: &market ["SZ301536"]
+benchmark: &benchmark SZ301536
+
+data_handler_config: &data_handler_config
+    start_time: 2024-03-28
+    end_time:   2026-04-28
+    fit_start_time: 2024-03-28
+    fit_end_time:   2025-09-30
+    instruments: *market
+    infer_processors:
+        - class: RobustZScoreNorm
+          kwargs:
+              fields_group: feature
+              clip_outlier: true
+        - class: Fillna
+          kwargs:
+              fields_group: feature
+    learn_processors:
+        - class: DropnaLabel
+    label: ["Ref($close, -2) / Ref($close, -1) - 1"]
+
+# 嵌套执行：日频决策 -> 1min TWAP 拆单
+# 依赖分钟数据位于 provider_uri.1min（../../data/cn_data_1min）
+port_analysis_config: &port_analysis_config
+    executor:
+        class: NestedExecutor
+        module_path: qlib.backtest.executor
+        kwargs:
+            time_per_step: day
+            inner_executor:
+                class: SimulatorExecutor
+                module_path: qlib.backtest.executor
+                kwargs:
+                    time_per_step: 1min
+                    generate_portfolio_metrics: False
+                    verbose: True
+                    indicator_config:
+                        show_indicator: True
+            inner_strategy:
+                class: TWAPStrategy
+                module_path: qlib.contrib.strategy.rule_strategy
+            track_data: True
+            generate_portfolio_metrics: True
+            verbose: True
+            indicator_config:
+                show_indicator: True
+
+    strategy:
+        class: IntradayTStrategy
+        module_path: intraday_t_strategy
+        kwargs:
+            signal: <PRED>
+            stock_id: "SZ301536"
+            buy_thresh: 0.0008
+            sell_thresh: -0.0008
+            trade_unit: 100
+            position_pct: 0.30
+            allow_first_sell: True
+
+    backtest:
+        start_time: 2026-01-05
+        end_time:   2026-04-24
+        account:
+            cash: 500000
+            SZ301536:
+                amount: 2000
+                price: 61.74   # 2026-01-05 收盘价
+        benchmark: *benchmark
+        exchange_kwargs:
+            freq: 1min
+            limit_threshold: 0.195
+            deal_price: close
+            open_cost:  0.0005
+            close_cost: 0.0015
+            min_cost:   5
+            trade_unit: 100
+
+task:
+    model:
+        class: DEnsembleModel
+        module_path: qlib.contrib.model.double_ensemble
+        kwargs:
+            base_model: "gbm"
+            loss: mse
+            num_models: 3
+            enable_sr: True
+            enable_fs: True
+            alpha1: 1.0
+            alpha2: 1.0
+            bins_sr: 10
+            bins_fs: 5
+            decay: 0.5
+            sample_ratios: [0.8, 0.7, 0.6, 0.5, 0.4]
+            sub_weights:   [1, 1, 1]
+            epochs: 100
+            colsample_bytree: 0.8
+            learning_rate: 0.03
+            subsample: 0.85
+            lambda_l1: 0.5
+            lambda_l2: 1.0
+            max_depth: 4
+            min_child_samples: 5
+            num_leaves: 16
+            num_threads: 4
+            verbosity: 1
+
+    dataset:
+        class: DatasetH
+        module_path: qlib.data.dataset
+        kwargs:
+            handler:
+                class: Alpha158HF
+                module_path: handlers.alpha158_hf
+                kwargs: *data_handler_config
+            segments:
+                train: [2024-03-28, 2025-06-30]
+                valid: [2025-07-01, 2025-12-31]
+                test:  [2026-01-01, 2026-04-28]
+
+    record:
+        - class: SignalRecord
+          module_path: qlib.workflow.record_temp
+          kwargs:
+            model:   <MODEL>
+            dataset: <DATASET>
+        - class: SigAnaRecord
+          module_path: qlib.workflow.record_temp
+          kwargs:
+            ana_long_short: False
+            ann_scaler: 252
+        - class: PortAnaRecord
+          module_path: qlib.workflow.record_temp
+          kwargs:
+            config: *port_analysis_config
