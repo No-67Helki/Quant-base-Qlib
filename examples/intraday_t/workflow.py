@@ -19,6 +19,7 @@ import qlib
 from qlib.utils import init_instance_by_config, flatten_dict
 from qlib.workflow import R
 from qlib.workflow.record_temp import PortAnaRecord, SigAnaRecord, SignalRecord
+from model_serving import export_from_model
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 # 把当前目录加入 sys.path 以便 IntradayTStrategy 的 module_path 能解析
@@ -63,6 +64,14 @@ def run_once(
         # ---- 嵌套TWAP执行回测 ----
         par = PortAnaRecord(recorder, cfg["port_analysis_config"], "day")
         par.generate()
+
+        # ---- 导出模型供实盘推理 ----
+        export_path = Path("models") / f"{exp_name}.pkl"
+        try:
+            export_from_model(model, dataset, str(export_path))
+            print(f"[export] 模型已导出至 {export_path}")
+        except Exception as e:
+            print(f"[export] 模型导出失败 (非致命): {e}")
 
     print(f"[OK] 实验完成。可用 `mlflow ui` 查看 {exp_name} 结果。")
 

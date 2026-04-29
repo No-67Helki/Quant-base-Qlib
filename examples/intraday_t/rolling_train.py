@@ -19,6 +19,7 @@ import fire
 
 import qlib
 from qlib.contrib.rolling.base import Rolling
+from qlib.utils import init_instance_by_config
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 if str(DIRNAME) not in sys.path:
@@ -36,6 +37,7 @@ class IntradayTRolling(Rolling):
         horizon: int = 1,
         step: int = 20,
         exp_name: str = "intraday_t_rolling",
+        export_models: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -45,6 +47,41 @@ class IntradayTRolling(Rolling):
             exp_name=exp_name,
             **kwargs,
         )
+        self.export_models = export_models
+
+    def run(self):
+        super().run()
+        if self.export_models:
+            self._export_latest_model()
+
+    def _export_latest_model(self):
+        """Export the most recent rolling model for live serving."""
+        try:
+            from model_serving import ModelExporter
+            import mlflow
+            from qlib.workflow import R
+
+            exp = R.get_exp(experiment_name=self.exp_name)
+            rec = exp.list_recorders()[-1] if exp.list_recorders() else None
+            if rec is None:
+                print("[export] No recorders found in rolling experiment.")
+                return
+            model = rec.load_object("params.pkl")
+            if model is None:
+                print("[export] No params.pkl found in latest recorder.")
+                return
+
+            cfg = self._raw_conf()
+            handler_cfg = cfg["task"]["dataset"]["kwargs"]["handler"]
+            handler = init_instance_by_config(handler_cfg)
+            _, feature_names = handler.get_feature_config()
+
+            export_path = Path("models") / f"{self.exp_name}_latest.pkl"
+            exporter = ModelExporter(model, list(feature_names))
+            exporter.export(str(export_path))
+            print(f"[export] Rolling model exported to {export_path}")
+        except Exception as e:
+            print(f"[export] Rolling model export failed (non-fatal): {e}")
 
 
 def run(
@@ -53,7 +90,6 @@ def run(
     horizon: int = 1,
     exp_name: str = "intraday_t_rolling",
 ):
-    # 提前 init qlib（Rolling 内部使用 qlib.config 中的 provider_uri）
     from ruamel.yaml import YAML
 
     with open(conf_path, "r", encoding="utf-8") as f:

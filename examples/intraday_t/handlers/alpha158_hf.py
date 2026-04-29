@@ -47,6 +47,20 @@ class Alpha158HF(Alpha158):
     ]
     HF_NAMES = ["OVN_GAP", "MOM_TAIL5", "RNG_OPEN", "INTRA_VOL5", "PV_DIV5"]
 
+    @staticmethod
+    def get_feature_names() -> list:
+        """Return the full list of 163 feature names (158 + 5 HF)."""
+        conf = {
+            "kbar": {},
+            "price": {
+                "windows": [0],
+                "feature": ["OPEN", "HIGH", "LOW", "VWAP"],
+            },
+            "rolling": {},
+        }
+        _, names = Alpha158DL.get_feature_config(conf)
+        return list(names) + list(Alpha158HF.HF_NAMES)
+
     def get_feature_config(self):
         # 复用 Alpha158 默认配置，得到 158 个原始因子
         conf = {

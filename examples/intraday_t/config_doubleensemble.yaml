@@ -69,11 +69,19 @@ port_analysis_config: &port_analysis_config
         kwargs:
             signal: <PRED>
             stock_id: "SZ301536"
-            buy_thresh: 0.0008      # 预测涨幅阈值（约 0.08% 触发买入）
-            sell_thresh: -0.0008    # 预测跌幅阈值
-            trade_unit: 100         # A股最小交易单位
-            position_pct: 0.30      # 单笔下单使用账户价值的比例
-            allow_first_sell: True  # 允许首笔卖出（消耗已有持仓）
+            buy_thresh: 0.0008
+            sell_thresh: -0.0008
+            trade_unit: 100
+            buy_pct: 0.30
+            sell_pct: 0.50
+            allow_first_sell: True
+            # -- 风控开关（默认关闭，逐步开启） --
+            enable_stop_loss: false
+            stop_loss_pct: 0.03
+            enable_adaptive_thresh: false
+            adaptive_thresh_lookback: 60
+            adaptive_thresh_percentile: 0.20
+            enable_signal_guard: true
 
     backtest:
         start_time: 2026-01-05          # 最近约4个月做回测（数据最新段）
@@ -86,12 +94,14 @@ port_analysis_config: &port_analysis_config
                 # price 留空则由 Qlib 用回测起点附近的close自动填充
         benchmark: *benchmark
         exchange_kwargs:
+            codes: ["SZ301536"]
             freq: 1min
-            limit_threshold: 0.195          # 创业板注册制涨跌停±20%
-            deal_price: close
-            open_cost:  0.0005              # 买入手续费 0.05%
-            close_cost: 0.0015              # 卖出含印花税 0.15%
+            limit_threshold: 0.195
+            deal_price: $vwap
+            open_cost:  0.0005
+            close_cost: 0.0015
             min_cost:   5
+            impact_cost: 0.0005
             trade_unit: 100
 
 # ---- 任务定义 ----

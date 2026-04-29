@@ -78,8 +78,15 @@ port_analysis_config: &port_analysis_config
             buy_thresh: 0.0008
             sell_thresh: -0.0008
             trade_unit: 100
-            position_pct: 0.30
+            buy_pct: 0.30
+            sell_pct: 0.50
             allow_first_sell: True
+            enable_stop_loss: false
+            stop_loss_pct: 0.03
+            enable_adaptive_thresh: false
+            adaptive_thresh_lookback: 60
+            adaptive_thresh_percentile: 0.20
+            enable_signal_guard: true
 
     backtest:
         start_time: 2026-01-05
@@ -94,10 +101,11 @@ port_analysis_config: &port_analysis_config
             codes: ["SZ301536"]      # 限定回测可交易标的，避免加载全池 1min 数据
             freq: 1min
             limit_threshold: 0.195
-            deal_price: close
+            deal_price: $vwap
             open_cost:  0.0005
             close_cost: 0.0015
             min_cost:   5
+            impact_cost: 0.0005
             trade_unit: 100
 
 task:
@@ -128,7 +136,7 @@ task:
             min_child_samples: 200       # 大样本下提高，避免噪声叶
             num_leaves: 128
             num_threads: 8
-            verbosity: 1
+            verbosity: -1
 
     dataset:
         class: DatasetH
