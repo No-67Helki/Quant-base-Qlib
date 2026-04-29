@@ -212,7 +212,8 @@ class IntradayTStrategy(BaseSignalStrategy):
         if not np.isfinite(current_score):
             return
         self._pred_buffer.append(current_score)
-        if len(self._pred_buffer) > self.adaptive_thresh_lookback * 2:
+        max_buf = max(self.adaptive_thresh_lookback * 2, 60)
+        if len(self._pred_buffer) > max_buf:
             self._pred_buffer.pop(0)
 
         self._adaptive_recal_counter += 1
@@ -220,7 +221,7 @@ class IntradayTStrategy(BaseSignalStrategy):
             return
         self._adaptive_recal_counter = 0
 
-        if len(self._pred_buffer) < 30:
+        if len(self._pred_buffer) < self.adaptive_thresh_lookback:
             return
 
         arr = np.array(self._pred_buffer)
@@ -504,6 +505,10 @@ class IntradayTStrategy(BaseSignalStrategy):
                         else trade_val - trade_cost
                     )
                     self.risk_manager.update_daily_pnl(float(_pnl))
-        self._track_stop_loss_entry(
-            *self.trade_calendar.get_step_time(self.trade_calendar.get_trade_step())
-        )
+        if self.enable_stop_loss or self.risk_manager is not None:
+            try:
+                self._track_stop_loss_entry(
+                    *self.trade_calendar.get_step_time(self.trade_calendar.get_trade_step())
+                )
+            except (IndexError, KeyError):
+                pass
